@@ -1,0 +1,64 @@
+---
+
+- name: Requirements for master node
+  hosts: master
+  become: yes
+
+  tasks:
+
+  - name: Test to see if k3s exists
+    stat:
+      path: /usr/local/bin/k3s
+    register: k3s
+
+  - name: Get k3s installer if binary doesn't exist
+    get_url: 
+      url: https://get.k3s.io
+      dest: "/home/{{ user_name }}/k3s-installer.sh"
+      mode: 0755
+    when: not k3s.stat.exists
+
+  - name: Execute installer script if binary doesn't exist
+    shell: "/home/{{ user_name }}/k3s-installer.sh"
+    when: not k3s.stat.exists
+
+  - name: Cleanup installer script
+    file: 
+      path: "/home/{{ user_name }}/k3s-installer.sh"
+      state: absent
+
+  - name: Pull down cluster join token
+    ansible.builtin.fetch:
+      src: /var/lib/rancher/k3s/server/node-token
+      dest: join-token
+      flat: yes
+
+  - name: Install jre
+    apt:
+      name: openjdk-11-jre
+
+  - name: Add jenkins apt key
+    ansible.builtin.apt_key:
+      url: https://pkg.jenkins.io/debian/jenkins.io.key
+      state: present
+
+  - name: Add jenkins repository
+    ansible.builtin.apt_repository:
+      repo: deb https://pkg.jenkins.io/debian binary/
+      state: present
+
+  - name: Install jenkins
+    apt:
+      name: jenkins
+      update_cache: yes
+
+  - name: Add jenkins to docker group
+    ansible.builtin.user:
+      name: jenkins
+      groups: docker
+
+  - name: Install docker
+    apt:
+      name: docker.io
+
+

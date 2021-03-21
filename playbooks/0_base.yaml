@@ -1,0 +1,76 @@
+---
+- name: Run action against localhost
+  hosts: 127.0.0.1
+  connection: local
+  become: yes
+  
+  tasks:
+  - name: Generate home_network key pair
+    community.crypto.openssh_keypair:
+      path: /etc/ssh/home_network
+
+- name: Base requirements for instances
+  hosts: all
+  become: yes
+
+  tasks:
+  - name: Update apt cache
+    apt: 
+      update_cache: yes
+      force_apt_get: yes
+      cache_valid_time: 3600
+  
+  - name: Upgrade all packages
+    apt: 
+      upgrade: dist
+      force_apt_get: yes
+
+  - name: Turn off swap space on disk
+    command: swapoff -a
+    become: true
+
+  - name: Ensure swap isn't turned on after reboot
+    replace:
+      path: /etc/fstab
+      regexp: '^(\s*)([^#\n]+\s+)(\w+\s+)swap(\s+.*)$'
+      replace: '#\1\2\3swap\4'
+      backup: yes
+
+  - name: Create home_network user
+    ansible.builtin.user:
+      name: "{{ user_name }}"
+      groups: sudo
+
+  - name: Create SSH directory
+    file:
+      path: "/home/{{ user_name }}/.ssh"
+      state: directory
+      owner: "{{ user_name }}"
+      group: "{{ user_name }}"
+      mode: '0755'
+
+  - name: Add home_network public key
+    ansible.builtin.copy:
+      src: /etc/ssh/home_network.pub
+      dest: "/home/{{ user_name }}/.ssh/authorized_keys"
+      owner: "{{ user_name }}"
+      group: "{{ user_name }}"
+      mode: '0655'
+
+  - name: Set no password for sudo users
+    lineinfile:
+      dest: /etc/sudoers
+      state: present
+      regexp: '^%sudo'
+      line: '%sudo ALL=(ALL) NOPASSWD: ALL'
+      validate: 'visudo -cf %s'
+
+  - name: Turn off password authentication
+    lineinfile:
+      dest: /etc/ssh/sshd_config
+      state: present
+      regexp: '^PasswordAuthentication'
+      line: 'PasswordAuthentication no'
+
+  - name: Reboot server
+    reboot:

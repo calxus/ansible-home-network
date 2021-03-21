@@ -1,0 +1,37 @@
+- name: Requirements for worker nodes
+  hosts: node
+  become: yes
+
+  tasks:
+  
+  - name: Test if k3s binary exists
+    stat:
+      path: /usr/local/bin/k3s
+    register: k3s
+
+  - name: Get k3s installer if binary doesn't exist
+    get_url: 
+      url: https://get.k3s.io
+      dest: /home/{{ user_name }}/k3s-installer.sh
+      mode: 0755
+    when: not k3s.stat.exists
+
+  - name: Place join token on worker node if binary doesn't exist
+    ansible.builtin.copy:
+      src: join-token
+      dest: /home/{{ user_name }}/join-token
+    when: not k3s.stat.exists
+
+  - name: Execute installer if binary doesn't exist
+    shell: 'K3S_URL="https://{{ hostvars[inventory_hostname].master_node }}:6443" K3S_TOKEN="$(cat /home/{{ user_name }}/join-token)" /home/{{ user_name }}/k3s-installer.sh'
+    when: not k3s.stat.exists
+
+  - name: Cleanup installer script
+    file: 
+      path: /home/{{ user_name }}/k3-installer.sh
+      state: absent
+
+  - name: Cleanup join token
+    file: 
+      path: /home/{{ user_name }}/join-token
+      state: absent
